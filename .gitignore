@@ -1,2 +1,7 @@
 __pycache__
 .DS_Store
+bin
+include
+lib
+cx_*
+.Python

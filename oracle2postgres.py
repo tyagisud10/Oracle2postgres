@@ -3,7 +3,6 @@ import sys
 import logging
 from datetime import datetime
 import multiprocessing
-import pandas as pd
 import sqlalchemy
 from sqlalchemy.orm import sessionmaker
 import cx_Oracle

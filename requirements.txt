@@ -2,7 +2,7 @@ cx-Oracle==7.0.0
 DateTime==4.3
 numpy
 pandas
-psycopg2
+psycopg2-binary
 python-dateutil==2.7.5
 pytz==2018.9
 six==1.12.0

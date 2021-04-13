@@ -1,39 +1,59 @@
-#!/usr/bin/env python3
-from migration import Migration
+#!/usr/bin/python
+from flask import Flask, redirect, url_for, request
+import run_migration as migration
+import json
 
-source_config = {
-    'username': 'hr',
-    'host': 'localhost',
-    'port': 1521,
-    'database': 'orcl',
-    'password': 'oracle',
-    'schema_list': ['hr']
-}
+app = Flask(__name__)
 
-target_config = {
-    'username': 'sudh',
-    'host': 'localhost',
-    'port': 5432,
-    'database': "hr",
-    'password': 'sudh@123'
-}
+# configuration = {
+#     'source_config' = {
+#         'username': 'hr',
+#         'host': 'localhost',
+#         'port': 1521,
+#         'database': 'orcl',
+#         'password': 'oracle',
+#         'schema_list': ['hr']
+#     },
+#
+#     'target_config' = {
+#         'username': 'sudh',
+#         'host': 'localhost',
+#         'port': 5432,
+#         'database': "hr",
+#         'password': 'sudh@123'
+#     },
+#
+#     'migration_config' = {
+#         'load_type': True,
+#         'trialrun': True,
+#         'batchsize': '10',
+#         'logged': False,
+#         'multiprocess': True,
+#         'processes': None
+#     }
+# }
 
-migration_config = {
-    'load_type': True,
-    'trialrun': True,
-    'batchsize': '10',
-    'logged': False,
-    'multiprocess': True,
-    'processes': None
-}
 
-# validate all the configuration!
-# this configuration will be passed by the frontend in some way or the other
-def validate():
-    # clean_test will come here!
-    pass
 
-migration = Migration(source_config, target_config, migration_config)
-migration.schema()
-migration.run()
-migration.check()
+@app.route('/start')
+def start():
+   return 'Starting migration!'
+
+@app.route('/login', methods = ['POST'])
+def login():
+    config = request.data
+    print(type(config))
+    config = json.loads(config)
+    print(config)
+    migration.run(config)
+    return redirect(url_for('start'))
+   # return redirect(url_for('success',name = user))
+
+if __name__ == '__main__':
+   app.run(debug = True)
+
+
+# migration = Migration(source_config, target_config, migration_config)
+# migration.schema()
+# migration.run()
+# migration.check()
