@@ -14,21 +14,88 @@ from sqlalchemy.dialects.postgresql import \
     INTERVAL, JSON, JSONB, MACADDR, NUMERIC, OID, REAL, SMALLINT, TEXT, \
     TIME, TIMESTAMP, UUID, VARCHAR, INT4RANGE, INT8RANGE, NUMRANGE, \
     DATERANGE, TSRANGE, TSTZRANGE, TSVECTOR
-
 import os
 import psycopg2
 import readline # support use of cursors in user input
 import getpass
 
-def create_logfile(fn='migration.log'):
-    """
-    Create a log file (record info status and above)
+logfile = "{}_{}".format(datetime.now().strftime("%Y_%m_%d"), 'migration.log')
+logging.basicConfig(filename=logfile,level=logging.INFO)
 
-    Args:
-        fn (str): Name of logfile, appended to the date. Default is 'migration.log'
-    """
-    logfile = "{}_{}".format(datetime.now().strftime("%Y_%m_%d"), fn)
-    logging.basicConfig(filename=logfile,level=logging.INFO)
+class Oracle2Postgres(object):
+    def __init__(self, source, target, migration):
+        self.source = source
+        self.target = target
+        self.migration = migration
+        if self.migration['trial_run']:
+            self.migration['batch_size'] = min(self.migration['batch_size'], 1100000)
+
+        self.source_engine = None
+        self.target_engine = None
+
+    def source_connection(self):
+        if self.source_engine != None:
+            # dont recreate connections! use if it already exists!
+            return self.source_engine
+
+        dsn_str = cx_Oracle.makedsn(
+            self.source['host'],
+            self.source['port'],
+            service_name=self.source['database'])
+        con_string = 'oracle://{}:{}@'.format(self.source['username'],
+            self.source['password']) + dsn_str
+        engine = sqlalchemy.create_engine(con_string, echo = self.debug)
+        inspector = sqlalchemy.inspect(engine)
+        all_schema = inspector.get_schema_names()
+        for x in self.source['schema_list']:
+            if x not in all_schema:
+                msg = "The following schema are not found on the source database: {}".format(x)
+                logging.error(msg)
+                raise Exception(msg)
+        return engine
+
+    def target_connection(self):
+        if self.target_engine != None:
+            # dont recreate connections! use if it already exists!
+            return self.target_engine
+
+        con_string = 'postgresql+psycopg2://{}:{}@{}:{}/{}'.format(
+            self.target['username'],
+            self.target['password'],
+            self.target['host'],
+            self.target['port'],
+            self.target['database'])
+        return sqlalchemy.create_engine(con_string, echo = self.debug)
+
+    def run(self):
+        if self.migration['multiprocess']:
+            if self.migration['processes']:
+                pool = multiprocessing.Pool(int(self.migration['processes']))
+            else:
+                pool = multiprocessing.Pool()
+            arg_iterable = [[schema, self.source, self.target, self.migration] for schema in self.source['schema_list']]
+            pool.starmap(self._migrate_data, arg_iterable)
+
+    def _migrate_data(self):
+        pass
+
+
+
+def _migrate_data(schema,source_config,target_config,migration_config):
+    # create database connections
+    source_engine = connect_to_source(source_config)
+    target_engine = connect_to_target(target_config,target_config['database'])
+
+    # load the schema metadata profile
+    source_metadata = sqlalchemy.MetaData(source_engine)
+    source_metadata.reflect(schema=schema)
+
+    # iterate the tables, loading the data
+    for t in source_metadata.sorted_tables:
+        _copy_data(source_engine,schema,target_engine,t,migration_config['batchsize'],
+            migration_config['logged'],trialrun=migration_config['trialrun'])
+
+
 
 def check_for_nulls(engine,schema_list,remove=False):
     """
@@ -78,26 +145,7 @@ def check_for_nulls(engine,schema_list,remove=False):
 
     con.close()
 
-def connect_to_target(config,dbname=None):
-    """
-    Connect to target database.
 
-    Args:
-        config (dict): Settings for the target database.
-        dbname (str): Name of target database.
-    """
-    print_log = False
-
-    if dbname:
-        con_string = 'postgresql+psycopg2://{}:{}@{}:{}/{}'.format(config['username'],
-            config['password'], config['host'], config['port'], dbname)
-    else:
-        con_string = 'postgresql+psycopg2://{}:{}@{}:{}'.format(config['username'],
-            config['password'], config['host'], config['port'])
-
-    engine = sqlalchemy.create_engine(con_string, echo = print_log)
-
-    return engine
 
 def _clean_list(schema_list):
     """
@@ -111,54 +159,6 @@ def _clean_list(schema_list):
     except:
         pass
     return cleaned
-
-def check_schema_exist(engine,schema_list):
-    """
-    Check the schema are present on the source database
-
-    Args:
-        engine (obj): Database engine.
-        schema_list (list): List of schema.
-    """
-    # get list of all schema
-    inspector = sqlalchemy.inspect(engine)
-    all_schema = inspector.get_schema_names()
-
-    # check schema are in the database
-    not_found = [x for x in schema_list if x not in all_schema]
-
-    if not_found:
-        msg = "The following schema are not found on the source database: {}".format(not_found)
-        logging.info(msg)
-        sys.exit(msg)
-
-    msg = '\nList of schema to copy: {}\n'.format(schema_list)
-    print(msg)
-
-    return schema_list
-
-def _migrate_data(schema,source_config,target_config,migration_config):
-    """
-    Migrate the data from the source tables to the target tables
-
-    Args:
-        schema (str): Name of schema to migrate.
-        source_config (dict): Settings for source database.
-        target_config (dict): Settings for target database.
-        migration_config (dict): Settings for the migration.
-    """
-    # create database connections
-    source_engine = connect_to_source(source_config)
-    target_engine = connect_to_target(target_config,target_config['database'])
-
-    # load the schema metadata profile
-    source_metadata = sqlalchemy.MetaData(source_engine)
-    source_metadata.reflect(schema=schema)
-
-    # iterate the tables, loading the data
-    for t in source_metadata.sorted_tables:
-        _copy_data(source_engine,schema,target_engine,t,migration_config['batchsize'],
-            migration_config['logged'],trialrun=migration_config['trialrun'])
 
 def create_target_schema(schema_list,source_engine,target_engine):
     """
@@ -484,38 +484,7 @@ def _convert_type(colname, ora_type, schema_name='',
 
     return pg_type
 
-def migrate(source_config,target_config,migration_config):
-    """
-    Migrate data from the source database to the target database. The target
-    database and schema must already exist.
 
-    Args:
-        source_config (dict): Settings for source database.
-        target_config (dict): Settings for target database.
-        migration_config (dict): Settings for the migration.
-    """
-    msg = 'Migrating data to target database...\n'
-    print(msg)
-
-    # set up multiprocessing
-    if migration_config['multiprocess']:
-
-        # set number of processes
-        if migration_config['processes']:
-            pool = multiprocessing.Pool(int(migration_config['processes']))
-        else:
-            pool = multiprocessing.Pool()
-
-        # starmap takes an iterable list
-        arg_iterable = [[schema,source_config,target_config,migration_config] for schema in source_config['schema_list']]
-        pool.starmap(_migrate_data,arg_iterable)
-    else:
-        for schema in source_config['schema_list']:
-            _migrate_data(schema,source_config,target_config,migration_config)
-
-    msg = 'Migration complete!\n'
-    logging.info(msg)
-    print(msg)
 
 def check_migration(source_engine,target_engine,source_config):
     """
