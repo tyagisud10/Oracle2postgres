@@ -1,7 +1,10 @@
 #!/usr/bin/python
-from flask import Flask, redirect, url_for, request
+from flask import Flask, redirect, url_for, request, Response,jsonify, make_response
+
+
 import run_migration as migration
 import json
+
 
 app = Flask(__name__)
 
@@ -35,18 +38,25 @@ app = Flask(__name__)
 
 
 
-@app.route('/start')
-def start():
-   return 'Starting migration!'
+# @app.route('/start')
+# def start():
+#    return 'Starting migration!'
+#
+# @app.route('/end')
+# def end():
+#     return 'Ending Migration!'
 
 @app.route('/login', methods = ['POST'])
 def login():
     config = request.data
+    # return make_response(jsonify(message='Failure')), 400
     print(type(config))
     config = json.loads(config)
     print(config)
     migration.run(config)
-    return redirect(url_for('start'))
+
+    return jsonify(
+        message='success')
    # return redirect(url_for('success',name = user))
 
 if __name__ == '__main__':

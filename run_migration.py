@@ -11,22 +11,8 @@ import sys
 import oracle2postgres
 
 def run(config):
-    """
-    Connects to the source and target databases, then migrates a list of defined schema.
-    """
-    msg =  """
-    ----------------------------------------------------- \n
-    Running this script will delete the target database!  \n
-    And it will close connections on the target database. \n
-    Are you sure you wish to continue? (y/n)              \n
-    ----------------------------------------------------- \n
-    \n"""
 
-    # if input(msg).lower() != "y":
-    #     sys.exit()
-
-    # create the logfile
-    oracle2postgres.create_logfile()
+    #oracle2postgres.create_logfile()
 
     # get settings for migration
     source_config = config['source_config']
@@ -52,15 +38,7 @@ def run(config):
     target_engine = oracle2postgres.connect_to_target(target_config,target_config['database'])
     oracle2postgres.create_target_schema(source_config['schema_list'],source_engine,target_engine)
 
-    msg = """
-      ----------------------------------------------------- \n
-      Do you want to copy the data as well? (y/n)             \n
-      ----------------------------------------------------- \n
-      \n"""
-
-    if input(msg).lower() == "y":
-
-        # run the migration
+    if migration_config['load_type'] == "F":
         oracle2postgres.migrate(source_config, target_config, migration_config)
 
     # check results
