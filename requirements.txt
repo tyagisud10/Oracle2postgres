@@ -9,3 +9,5 @@ six==1.12.0
 SQLAlchemy==1.3.0
 zope.interface
 flask
+flask_cors
+json

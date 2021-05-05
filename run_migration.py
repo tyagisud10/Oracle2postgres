@@ -36,9 +36,10 @@ def run(config):
 
     # create the schema on the target database
     target_engine = oracle2postgres.connect_to_target(target_config,target_config['database'])
-    oracle2postgres.create_target_schema(source_config['schema_list'],source_engine,target_engine)
+    if migration_config['load_type'] == 'P' or migration_config['load_type'] == 'F':
+        oracle2postgres.create_target_schema(source_config['schema_list'],source_engine,target_engine)
 
-    if migration_config['load_type'] == "F":
+    if migration_config['load_type'] == "F" or migration_config['load_type'] == "D":
         oracle2postgres.migrate(source_config, target_config, migration_config)
 
     # check results

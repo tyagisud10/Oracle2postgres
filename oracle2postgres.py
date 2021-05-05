@@ -4,6 +4,7 @@ from datetime import datetime
 import multiprocessing
 import sqlalchemy
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy import exc
 import cx_Oracle
 from sqlalchemy.dialects.postgresql import \
     ARRAY, BIGINT, BIT, BOOLEAN, BYTEA, CHAR, CIDR, DATE, \
@@ -82,10 +83,12 @@ def connect_to_source(config):
     """
     print_log = False
 
+
+
     dsn_str = cx_Oracle.makedsn(config['host'], config['port'], service_name=config['database'])
     con_string = 'oracle://{}:{}@'.format(config['username'], config['password']) + dsn_str
     engine = sqlalchemy.create_engine(con_string, echo=print_log)
-
+    engine.connect()
     return engine
 
 
@@ -97,7 +100,6 @@ def connect_to_target(config, dbname=None):
         dbname (str): Name of target database.
     """
     print_log = False
-
     if dbname:
         con_string = 'postgresql+psycopg2://{}:{}@{}:{}/{}'.format(config['username'],
                                                                    config['password'], config['host'], config['port'],
@@ -106,9 +108,10 @@ def connect_to_target(config, dbname=None):
         con_string = 'postgresql+psycopg2://{}:{}@{}:{}'.format(config['username'],
                                                                 config['password'], config['host'], config['port'])
 
-    engine = sqlalchemy.create_engine(con_string, echo=print_log)
-
+    engine = sqlalchemy.create_engine(con_string, echo="debug")
+    engine.connect()
     return engine
+
 
 
 def _clean_list(schema_list):
@@ -118,7 +121,7 @@ def _clean_list(schema_list):
         schema_list (list): List of schema
     """
     try:
-        cleaned = [x.strip(' ') for x in schema_list.split(',')]
+        cleaned = [x.strip( ' ') for x in schema_list.split(',')]
     except:
         pass
     return cleaned
@@ -405,7 +408,7 @@ def _copy_data(source_engine,source_schema,target_engine,table,
         logging.info(msg)
 
         # break after a couple of loops
-        if trialrun and offset > 10:
+        if trialrun and offset > 1:
             break
 
         # update the offset
